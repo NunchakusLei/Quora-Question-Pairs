@@ -1,0 +1,10 @@
+venv/
+mnist_softmax.py
+*.pyc
+
+.DS_Store
+
+
+
+
+
