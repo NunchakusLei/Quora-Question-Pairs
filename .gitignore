@@ -1,5 +1,7 @@
 data/
 venv/
+
+mnist_deep.py
 mnist_softmax.py
 *.pyc
 
