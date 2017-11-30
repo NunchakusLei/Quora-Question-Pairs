@@ -3,9 +3,11 @@ venv/
 
 mnist_deep.py
 mnist_softmax.py
+word2vec_basic.py
 *.pyc
 
 .DS_Store
+text8.zip
 
 
 
