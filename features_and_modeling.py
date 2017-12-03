@@ -37,6 +37,11 @@ df = pd.DataFrame(f)
 data_test= pd.DataFrame(test_f)
 
 
+# In[331]:
+
+test_f
+
+
 # In[7]:
 
 data = f.drop(['id', 'qid1', 'qid2'], axis=1)
@@ -247,6 +252,104 @@ data.to_csv('data/train_W2v_checkpoint.csv', index=False)
 data_test.to_csv('data/test_W2v_checkpoint.csv', index=False)
 
 
+# In[168]:
+
+from collections import defaultdict
+ques = pd.concat([f[['question1', 'question2']],
+        test_f[['question1', 'question2']]], axis=0).reset_index(drop='index')
+ques.shape
+
+
+# In[169]:
+
+q_dict = defaultdict(set)
+for i in range(ques.shape[0]):
+        q_dict[ques.question1[i]].add(ques.question2[i])
+        q_dict[ques.question2[i]].add(ques.question1[i])
+
+
+# In[171]:
+
+def q1_q2_intersect(row):
+    return(len(set(q_dict[row['question1']]).intersection(set(q_dict[row['question2']]))))
+
+
+# In[179]:
+
+data['q1_q2_intersect'] = f.apply(q1_q2_intersect, axis=1, raw=True)
+data_test['q1_q2_intersect'] = test_f.apply(q1_q2_intersect, axis=1, raw=True)
+
+
+# In[304]:
+
+stops = set(stopwords.words("english"))
+
+def word_match_share(q1, q2, stops=None):
+    q1 = str(q1).lower().split()
+    q2 = str(q2).lower().split()
+    q1words = {}
+    q2words = {}
+    for word in q1:
+        if word not in stops:
+            q1words[word] = 1
+    for word in q2:
+        if word not in stops:
+            q2words[word] = 1
+    if len(q1words) == 0 or len(q2words) == 0:
+        # The computer-generated chaff includes a few questions that are nothing but stopwords
+        return 0.
+    shared_words_in_q1 = [w for w in q1words.keys() if w in q2words]
+    shared_words_in_q2 = [w for w in q2words.keys() if w in q1words]
+    R = (len(shared_words_in_q1) + len(shared_words_in_q2))/(len(q1words) + len(q2words))
+    return R
+
+
+# In[305]:
+
+q_dict = defaultdict(dict)
+for i in range(ques.shape[0]):
+        wm = word_match_share(ques.question1[i], ques.question2[i], stops=stops)
+        q_dict[ques.question1[i]][ques.question2[i]] = wm
+        q_dict[ques.question2[i]][ques.question1[i]] = wm
+
+
+# In[307]:
+
+def q1_q2_wm_ratio(row):
+    q1 = q_dict[row['question1']]
+    q2 = q_dict[row['question2']]
+    inter_keys = set(q1.keys()).intersection(set(q2.keys()))
+    if(len(inter_keys) == 0): return 0.
+    inter_wm = 0.
+    total_wm = 0.
+    for q,wm in q1.items():
+        if q in inter_keys:
+            inter_wm += wm
+        total_wm += wm
+    for q,wm in q2.items():
+        if q in inter_keys:
+            inter_wm += wm
+        total_wm += wm
+    if(total_wm == 0.): return 0.
+    return inter_wm/total_wm
+
+
+# In[308]:
+
+data['q1_q2_wm_ratio'] = f.apply(q1_q2_wm_ratio, axis=1, raw=True)
+data_test['q1_q2_wm_ratio'] = test_f.apply(q1_q2_wm_ratio, axis=1, raw=True)
+
+
+# In[332]:
+
+dfs = (f, test_f)
+
+
+# In[333]:
+
+dfs
+
+
 # In[ ]:
 
 # question1_vectors = np.zeros((data.shape[0], 300))
@@ -317,23 +420,13 @@ data_test.to_csv('data/test_W2v_checkpoint.csv', index=False)
 # data.to_csv('data/quora_features.csv', index=False)
 
 
-# In[70]:
-
-data
-
-
-# In[71]:
-
-data_test
-
-
 # In[53]:
 
 data=data.drop(['is_duplicate'], axis=1)
 data_test= data_test.drop(['test_id','question1', 'question2'], axis=1)
 
 
-# In[72]:
+# In[312]:
 
 data.to_csv('data/quora_features_train.csv', index=False)
 data_test.to_csv('data/quora_features_test.csv', index=False)
@@ -344,7 +437,7 @@ data_test.to_csv('data/quora_features_test.csv', index=False)
 # data.to_csv('data/quora_features.csv', index=False)
 
 
-# In[73]:
+# In[313]:
 
 #df_train = pd.read_csv('/Users/joe/Desktop/811project/test.csv')
 
@@ -353,31 +446,22 @@ X_train = pd.read_csv('data/quora_features_train.csv', index_col=False)
 X_test = pd.read_csv('data/quora_features_test.csv', index_col=False)
 
 
-# In[74]:
-
-X_test
-
-
-# In[75]:
-
-f.head()
-
-
-# In[76]:
+# In[314]:
 
 y_train = f['is_duplicate'].values
 
 
-# In[77]:
+# In[315]:
 
 from sklearn.linear_model import LogisticRegression, SGDClassifier
 from sklearn.svm import SVC
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.tree import DecisionTreeClassifier, ExtraTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
+from sklearn import preprocessing
 
 
-# In[78]:
+# In[316]:
 
 X_train = X_train.replace(np.nan, 0.)
 X_train = X_train.replace(np.inf, 99.)
@@ -385,12 +469,17 @@ X_test = X_test.replace(np.nan, 0.)
 X_test = X_test.replace(np.inf, 99.)
 
 
-# In[79]:
+# In[269]:
+
+#X_train = preprocessing.scale(X_train)
+
+
+# In[317]:
 
 X_train.isnull().values.any()
 
 
-# In[80]:
+# In[318]:
 
 X_test.isnull().values.any()
 
@@ -400,19 +489,39 @@ X_test.isnull().values.any()
 # X_train.index.values
 
 
-# In[98]:
+# In[285]:
+
+#re1 = lr.predict(X_train[:])
+#re1
+def check_rate(orginal, result_prob):
+
+    temp = pd.DataFrame(columns=['test_id','is_duplicate_truth','result'])
+    #result_df.drop(['is_duplicate'], axis=1)
+    temp['test_id']= orginal.index.values
+    temp['is_duplicate_truth']=result_prob[:]
+    temp['result']=orginal['is_duplicate']
+    temp['is_it_correct'] = np.where(temp['is_duplicate_truth']==temp['result'], 1, 0)
+    correct=0;
+    for i in temp['is_it_correct']:
+        correct= i +correct
+    return correct/404290
+
+
+# In[287]:
 
 lr = LogisticRegression()
 lr.fit(X_train, y_train)
-
-
-# In[99]:
-
+#lr= LogisticRegression(solver='liblinear').fit(X_train, y_train)
 re1 = lr.predict_proba(X_test[:])
+#check_rate(f,re1)
+
+
+# In[288]:
+
 re1
 
 
-# In[100]:
+# In[289]:
 
 result_df = pd.DataFrame(columns=['test_id','is_duplicate'])
 #result_df.drop(['is_duplicate'], axis=1)
@@ -420,9 +529,51 @@ result_df['test_id']= test_f.index.values
 result_df['is_duplicate']=re1[:,1]
 
 
-# In[101]:
+# In[290]:
+
+result_df
+
+
+# In[291]:
 
 result_df.to_csv('data/LogisticRegression.csv', index=False)
+
+
+# In[319]:
+
+from sklearn.ensemble import GradientBoostingClassifier
+
+
+# In[320]:
+
+gb= GradientBoostingClassifier()
+gb
+
+
+# In[322]:
+
+gb= gb.fit(X_train, y_train)
+gb1 = gb.predict_proba(X_test[:])
+#check_rate(f,gb1)
+
+
+# In[324]:
+
+gb1[:30]
+
+
+# In[325]:
+
+result_dfg = pd.DataFrame(columns=['test_id','is_duplicate'])
+#result_df.drop(['is_duplicate'], axis=1)
+result_dfg['test_id']= test_f.index.values
+result_dfg['is_duplicate']=gb1[:,1]
+result_dfg.to_csv('data/GradientBoostingClassifier2.csv', index=False)
+
+
+# In[297]:
+
+result_dfg
 
 
 # In[ ]:
@@ -434,8 +585,8 @@ result_df.to_csv('data/LogisticRegression.csv', index=False)
 
 rf = RandomForestClassifier()
 rf.fit(X_train, y_train)
-re2 = rf.predict_proba(X_test[:])
-rf
+re2 = rf.predict_proba(X_train[:])
+re
 
 
 # In[91]:
@@ -447,20 +598,16 @@ result_df2['is_duplicate']=re2[:,1]
 result_df2.to_csv('data/RandomForestClassifier.csv', index=False)
 
 
-# In[92]:
-
-result_df2
-
-
 # In[93]:
 
 from sklearn.neighbors import NearestNeighbors
 
 
-# In[94]:
+# In[103]:
 
 kn = NearestNeighbors()
-kn.fit(X_train, y_train)
+#kn.fit(X_train, y_train)
+kn=NearestNeighbors(n_neighbors=2, algorithm='ball_tree').fit(X_train, y_train)
 kn2 = rf.predict_proba(X_test[:])
 kn2
 
